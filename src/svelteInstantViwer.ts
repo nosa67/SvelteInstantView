@@ -2,42 +2,53 @@ import { stringify } from 'querystring';
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+const fileAddition:string = "_tmpview";
+let svelteTempFile:string = "";
+let cssTempFile:string = "";
+
+//====================================================================================================
+//  svelteのインスタントビューを表示
+//====================================================================================================
 export default function showSvelteView(context: vscode.ExtensionContext, targetFile:any){
 
     // 一時ファイルの作成
-    let svelteTempFile = createTempSvelteFile(context, targetFile.fsPath);
+    createTempSvelteFile(context, targetFile.fsPath);
 
+    // 一時ファイルができなかったら処理しない
     if(svelteTempFile.length > 0 ){
+
         // 一時ファイルのブラウザ表示
         showBrowser("" + vscode.workspace.getConfiguration('svelte-instant-view').get('browser'), svelteTempFile);
 
-        // 30秒後に一時ファイルを削除
-        deleteSvelteTempFIle(svelteTempFile);
+        // 10秒後に一時ファイルを削除
+        deleteSvelteTempFIle();
     }
 }
 
+//----------------------------------------------------------------------------------------------------
 // 一時ファイルの作成
-function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:string) : string
+//----------------------------------------------------------------------------------------------------
+function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:string)
 {
     if(vscode.workspace.workspaceFolders !== undefined){
 
+        // html ドキュメントモジュールの追加
         const {JSDOM} = require('jsdom');
 
         // ファイル操作モジュールの追加
         var fs = require('fs');
 
-        // ベースファイルを取込
+        // 設定されているベースファイルを取込んでドキュメントオブジェクトにする
         let baseFilePath = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, "" + vscode.workspace.getConfiguration('svelte-instant-view').get('baseFile'));
         var baseHtml = fs.readFileSync(baseFilePath, 'utf8');
         const baseDoc = new JSDOM(baseHtml);
     
-        // 一時ファイルの名前を作成する
+        // 一時ファイルの名前を作成する（表示するsvelteのファイル名に固定の文字列を追加して拡張子を「html」にしたもの）
         let delimitPos = baseFilePath.lastIndexOf(".");
         let tmpFileName = baseFilePath.substr(0,delimitPos);
-        let tmpHtmlFilePath = tmpFileName + "_tmp.html";
-        let tmpCssFilePath = tmpFileName + "_tmp.css";
-
-        // svelteファイルの取り込み
+        svelteTempFile = tmpFileName + fileAddition + ".html";
+        
+        // svelteファイルの取り込みとスタイルタグと埋め込みhtmlタグの取得
         let svelteHtml = fs.readFileSync(svelteFilePath, 'utf8');
         const svelteDoc = new JSDOM(svelteHtml).window.document;
         let styleElement:any = undefined;
@@ -53,46 +64,56 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         // svelteファイルのスタイルシートの一時ファイルを作成しそのパスをベースファイルのドキュメントに埋め込み
         if(styleElement !== undefined)
         {
+            // css一時ファイルパスの作成
+            cssTempFile = tmpFileName + fileAddition + ".css";
+
+            // svelteのスタイルの言語（[css],sass,scss）を取得
             let attrLang = styleElement.getAttribute("lang").toLowerCase();
 
             // styleタグの属性が「sass」や「scss」ならcssに変換して保存。それ以外ならそのまま保存
             if(attrLang === "sass"){
-                let sass = require('sass'); // or require('node-sass');
-                let tmpSassFilePath = tmpFileName + "_tmp.sass";
+                let sass = require('sass');
+                let tmpSassFilePath = tmpFileName + fileAddition + ".sass";
                 fs.writeFileSync(tmpSassFilePath, styleElement.innerHTML);
-                var result = sass.renderSync({file: tmpSassFilePath});
-                fs.writeFileSync(tmpCssFilePath, result.css.toString());
+                fs.writeFileSync(cssTempFile, sass.renderSync({file: tmpSassFilePath}).css.toString());
                 fs.unlinkSync(tmpSassFilePath);
             }else if(attrLang === "scss"){
-                let sass = require('sass'); // or require('node-sass');
-                let tmpScssFilePath = tmpFileName + "_tmp.scss";
+                let sass = require('sass');
+                let tmpScssFilePath = tmpFileName + fileAddition + ".scss";
                 fs.writeFileSync(tmpScssFilePath, styleElement.innerHTML);
-                
-                var result = sass.renderSync({file: tmpScssFilePath});
-                fs.writeFileSync(tmpCssFilePath, result.css.toString());
+                fs.writeFileSync(cssTempFile, sass.renderSync({file: tmpScssFilePath}).css.toString());
                 fs.unlinkSync(tmpScssFilePath);
             }else{
-                fs.writeFileSync(tmpCssFilePath, attrLang.innerHTML);
+                fs.writeFileSync(cssTempFile, attrLang.innerHTML);
             }
 
             // 保存したcssファイルを取り込むようにベースファイルのドキュメントに埋め込
-            let cssFileOnlyName = tmpCssFilePath.substring(tmpCssFilePath.lastIndexOf('\\') + 1);
+            let cssFileOnlyName = cssTempFile.substring(cssTempFile.lastIndexOf('\\') + 1);
             let cssLinkElement = baseDoc.window.document.createElement("link");
             cssLinkElement.setAttribute("rel", "stylesheet");
             cssLinkElement.setAttribute("href", cssFileOnlyName);
             baseDoc.window.document.getElementsByTagName("HEAD")[0].appendChild(cssLinkElement);
         }
         
+        // ベースファイルからsvelteのjavascriptを除去する(設定の「disableScript」に設定されている文字列をsrcに含むscriptタグ)
+        let disableScript = "" + vscode.workspace.getConfiguration('svelte-instant-view').get('disableScript');
+        for(let scriptTag of baseDoc.window.document.getElementsByTagName("script"))
+        {
+            if(scriptTag.getAttribute("src").toLowerCase().indexOf(disableScript) >= 0){
+                scriptTag.remove();
+                break;
+            }
+        }
+
         // svelteファイルのhtmlをベースファイルのドキュメントに埋め込み
         let insertElement = baseDoc.window.document.getElementById(vscode.workspace.getConfiguration('svelte-instant-view').get('insertTag'));
         if(insertElement === null){
             throw new Error("Can't find TAG(ID:" + vscode.workspace.getConfiguration('svelte-instant-view').get('insertTag') + ") in base html.");
         }
-        insertElement.innerHTML = htmElement.innerHTML;
+        insertElement.innerHTML = htmElement.outerHTML;
 
         // svelteの一時ファイルを出力
-        fs.writeFileSync(tmpHtmlFilePath, baseDoc.serialize());
-        return tmpHtmlFilePath;
+        fs.writeFileSync(svelteTempFile, baseDoc.serialize());
     }else{
         throw new Error("NO workspase opens !");
     }
@@ -111,14 +132,20 @@ function showBrowser(browserName:string, svelteTempFilePath:string)
 }
 
 // 30秒後に一時ファイルを削除
-function deleteSvelteTempFIle(svelteTempFilePath:string)
+function deleteSvelteTempFIle()
 {
     setTimeout(() => {
         // ファイル操作モジュールの追加
         var fs = require('fs');
 
-        fs.unlinkSync(svelteTempFilePath);
-      }, 30000);
+        // svelte一時ビューファイルの削除
+        fs.unlinkSync(svelteTempFile);
+
+        // 一時cssファイルの削除
+        if(cssTempFile.length > 0){
+            fs.unlinkSync(cssTempFile);
+        }
+      }, 10000);
 }
 
 //====================================================================================================

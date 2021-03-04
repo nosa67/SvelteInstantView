@@ -42,6 +42,11 @@
 					"default": "contents",
 					"description": "Element ID in base html to insert svelte template html."
 				},
+				"svelte-instant-view.disableScript": {
+					"type": "string",
+					"default": "build/bundle.js",
+					"description": "Set disable svelte script for insert default svelte file."
+				},
 				"svelte-instant-view.browser": {
 					"type": "string",
 					"default": "chrome",
