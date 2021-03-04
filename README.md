@@ -9,6 +9,9 @@ This extension show the base html image embedded svelte file contains css file i
 If the style tag in a svelte file is type of sass or scss, then it's complied to css file.
 Attention! But it's not support included svelte compornents, And not support css file scope.
 
+## Requirements
+The extention open a local html file with Browser, So Site root-relative paths can't work. So use relative paths instead.
+
 ## Extension Settings
 
 This extension contributes the following settings:
