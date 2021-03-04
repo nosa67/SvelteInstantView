@@ -1,6 +1,7 @@
 {
 	"name": "svelte-instant-view",
-	"displayName": "Svelte Instant View",
+	"publisher":"nosa",
+	"displayName": "Svelte Instant Viewer",
 	"description": "Show html file in the browser without transpile. But JavaScript does not work.",
 	"version": "0.0.1",
 	"engines": {
