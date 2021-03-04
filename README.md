@@ -14,7 +14,7 @@ Attention! But it's not support included svelte compornents, And not support css
 This extension contributes the following settings:
 
 * `svelte-instant-view.baseFile`: set base html file. Default is 'public/index.html'.
-* `svelte-instant-view.insertTag`: set embeding tag id. Default is 'contents'.
+* `svelte-instant-view.insertTagSelector`: set embeding tag selector. Default is 'body'.
 * `svelte-instant-view.disableScript`: set svelte script in base html file. Default is 'build/bundle.js'.
 * `svelte-instant-view.browser`: select Browser for viewing image. 'chrome', 'firefox' or 'edge) can select.
 

@@ -1,6 +1,7 @@
 {
 	"name": "svelte-instant-view",
 	"publisher":"nosa",
+	"repository":"https://github.com/nosa67/SvelteInstantView.git",
 	"displayName": "Svelte Instant Viewer",
 	"description": "Show html file in the browser without transpile. But JavaScript does not work.",
 	"version": "0.0.1",
@@ -38,10 +39,10 @@
 					"default": "public/index.html",
 					"description": "Base html file to insert svelte compornent."
 				},
-				"svelte-instant-view.insertTag": {
+				"svelte-instant-view.insertTagSelector": {
 					"type": "string",
-					"default": "contents",
-					"description": "Element ID in base html to insert svelte template html."
+					"default": "body",
+					"description": "Element selector in base html to insert svelte template html."
 				},
 				"svelte-instant-view.disableScript": {
 					"type": "string",

@@ -68,7 +68,10 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
             cssTempFile = tmpFileName + fileAddition + ".css";
 
             // svelteのスタイルの言語（[css],sass,scss）を取得
-            let attrLang = styleElement.getAttribute("lang").toLowerCase();
+            let attrLang = "css";
+            if(styleElement.getAttribute("lang") !== null){
+                attrLang = styleElement.getAttribute("lang").toLowerCase();
+            } 
 
             // styleタグの属性が「sass」や「scss」ならcssに変換して保存。それ以外ならそのまま保存
             if(attrLang === "sass"){
@@ -84,7 +87,7 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
                 fs.writeFileSync(cssTempFile, sass.renderSync({file: tmpScssFilePath}).css.toString());
                 fs.unlinkSync(tmpScssFilePath);
             }else{
-                fs.writeFileSync(cssTempFile, attrLang.innerHTML);
+                fs.writeFileSync(cssTempFile, styleElement.innerHTML);
             }
 
             // 保存したcssファイルを取り込むようにベースファイルのドキュメントに埋め込
@@ -106,7 +109,7 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         }
 
         // svelteファイルのhtmlをベースファイルのドキュメントに埋め込み
-        let insertElement = baseDoc.window.document.getElementById(vscode.workspace.getConfiguration('svelte-instant-view').get('insertTag'));
+        let insertElement = baseDoc.window.document.querySelector(vscode.workspace.getConfiguration('svelte-instant-view').get('insertTag'));
         if(insertElement === null){
             throw new Error("Can't find TAG(ID:" + vscode.workspace.getConfiguration('svelte-instant-view').get('insertTag') + ") in base html.");
         }
