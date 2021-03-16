@@ -13,9 +13,6 @@ Attention! But it's not work svelte script.
 ## Requirements
 The extention open a local html file with Browser.
 
-## Requirements
-The extention open a local html file with Browser, So Site root-relative paths can't work. So use relative paths instead.
-
 ## Extension Settings
 
 This extension contributes the following settings:
