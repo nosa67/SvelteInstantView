@@ -37,4 +37,7 @@ bug fix.
 bug fix. Fixed opening only one tab
 support child compornents.
 support editting file view.
+
+# 0.1.1
+support child compornent static attributes.(not support script function.)
 　

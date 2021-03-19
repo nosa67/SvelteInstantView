@@ -64,7 +64,8 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         // svelteファイルを読み込んでDocumentを取得する
         let svelteHtml = (tetDoc === undefined )?fs.readFileSync(svelteFilePath, 'utf8'):tetDoc;
         const svelteDoc = new JSDOM(svelteHtml).window.document;
-    
+        // removeAllScriptTags(svelteDoc);
+        
         // svelteファイルの存在するフォルダを取得
         let lastFolderPos = Math.max(svelteFilePath.lastIndexOf("\\"),svelteFilePath.lastIndexOf("/"));
         const parentPath = svelteFilePath.substr(0, lastFolderPos);
@@ -96,6 +97,8 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         cssLinkElement.setAttribute("href", cssFileOnlyName);
         baseDOM.window.document.getElementsByTagName("HEAD")[0].appendChild(cssLinkElement);
 
+        baseDOM.window.document.body.innerHTML = removeSvelteCodes(baseDOM.window.document.body.innerHTML);
+
         // svelteの一時ファイルを出力
         svelteTempFile = tmpFileBasePath + fileAddition + ".html";
         fs.writeFileSync(svelteTempFile, baseDOM.serialize());
@@ -105,6 +108,158 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         throw new Error("NO workspase opens !");
     }
 }
+
+//--------------------------------------------------------------------------------
+// 複数文字の検索で、位置と文字列を返す
+//--------------------------------------------------------------------------------
+function findMutiSting(sourceStr:string, startIndex:number,...values:string[]):[number,string]{
+    
+    // 複数文字列の検索用正規表現を作成
+    let regStr = values[0];
+    for(let i = 1; i < values.length; i ++){
+        regStr += '|' + values[i];
+    }
+    let finder = new RegExp(regStr, 'g');
+
+    // 正規表現の最終位置を開始位置の一つ前に設定
+    finder.lastIndex = startIndex ;
+
+    // 正規表現で検索
+    let findResult = finder.exec(sourceStr);
+    if(findResult === null){
+        // 見つからなかった場合
+        return [-1, ''];
+    }else{
+        // 見つけた位置と文字列を返す
+        return [findResult.index, findResult[0]];
+    }
+}
+
+//HTMLからsvelteの埋め込みを削除する
+function removeSvelteCodes(source:string) : string{
+
+    let startIndex = 0;
+
+    let svelteCodeStart = source.indexOf('{');    
+    
+    if(svelteCodeStart < 0){
+        return source;
+    }else{
+        let svelteCodeEnd =  getLastKakko(source, svelteCodeStart + 1);
+        if(svelteCodeEnd >=source.length){
+            return source.substr(0,svelteCodeStart);
+        }else{
+            return source.substr(0,svelteCodeStart) + removeSvelteCodes(source.substr(svelteCodeEnd));
+        }
+    }
+}
+
+// 文字列の{が始まった位置から最終的な}の位置を取得する（最終的に閉じられていない場合は文字列の最終位置を取得する）
+function getLastKakko(source:string, startIndex:number):number{
+    
+    let depth = 1;
+    while(depth > 0){
+        let nextDelimit = findMutiSting(source,startIndex, '{', '}' );
+        if(nextDelimit[0] < 0){
+            return source.length;
+        }else{
+            if(nextDelimit[1] === '{'){
+                depth ++;
+            }else{
+                depth --;
+            }
+            startIndex = nextDelimit[0] + 1;
+        }
+    }
+    return startIndex;
+}
+
+// 親コンポーネントで指定されている属性値で子コンポーネントのHTMドキュメントの内容を調整する（静的な属性を反映させる。スクリプトやバインド変数は反映させていない）
+function getConvertedHtml(tagElement:Element, compornentDoc:Document):string{
+    
+    // タグの属性を取得する
+    let props:{[index: string]: string} = {};
+    for(let i = 0; i < tagElement.attributes.length; i ++){
+        props[tagElement.attributes[i].name] = tagElement.attributes[i].value;
+    }
+    
+    // 取得したタグの属性からコンポーネントのexportで名前を変更されている物を反映させる（export b as a）
+    for(let i = 0; i < compornentDoc.scripts.length; i ++)
+    {
+        replacePropAliases(props, compornentDoc.scripts[i].text);
+    }
+
+    //  コンポーネント内で屋の属性を引き継いだ変数が設定されている部分に反映させる
+    let resultHtml = "";
+    for(let i = 0; i < compornentDoc.children.length; i ++)
+    {
+        let scriptSource = compornentDoc.children[i].outerHTML;
+        let current = 0;
+        let startKakko = scriptSource.indexOf('{'); // svelteの開始位置を取得
+        while(startKakko >= 0){
+            // 開始位置までの文字列はそのまま返す為に格納
+            resultHtml += scriptSource.substr(current, startKakko - current);
+
+            // svelteのソースの最後を取得
+            let endKakko = getLastKakko(scriptSource,startKakko + 1);
+
+            //　svelteの最終位置と{の位置を比較して早い方までが変数の可能性があるのでその位置までの文字列を抽出して単語に分割する
+            let deliitPos = Math.min(endKakko, scriptSource.indexOf('{', startKakko+1));
+            let paramtext = scriptSource.substr(startKakko + 1, deliitPos - startKakko - 2).trim();
+            paramtext = paramtext.replace(/\t/g," ").replace(/,/g,' , ').replace(/;/g,' ; ');
+            let splitParamtext = paramtext.split(' ');
+
+            // 分割した単語が親コンポーネントで定義した属性の場合のみ変更して設定する
+            for(let param of splitParamtext){
+                if(props[param.toLowerCase()]){
+                    resultHtml += props[param.toLowerCase()] + ' '; 
+                }
+                else{
+                    resultHtml += param;
+                }
+            }
+            
+            // svelteのコードの最終位置から同じ処理を繰り返す
+            current = endKakko;
+            startKakko = scriptSource.indexOf('{', current);
+        }
+
+        // 最後の残り部分を追加する
+        if(current < scriptSource.length){
+            resultHtml += scriptSource.substr(current);
+        }
+    }
+
+    // 最終的にできたHTMLを返す
+    return resultHtml;
+}
+
+// 親コンポーネントで設定していた属性名とその値の連想配列で、exportで実際の変数名が変更されている場合、連想配列のキーをそれに置き換える
+function replacePropAliases(props:{[index: string]: string}, scriptSource:string){
+
+    let removeControlText =  scriptSource.replace(/[\n|\r\n|\r|\t|　]/g, ' ');  // 改行、タブ、全角スペースを半角スペースに変換
+    removeControlText = removeControlText.replace(/ +/g, ' ');                  // 半角スペースの連続を1つにする
+    let exportStart = removeControlText.indexOf(" export ");                    // exportを探す
+    if(exportStart >= 0){
+        if(removeControlText[exportStart + 8] === '{')
+        {
+            exportStart += 9;
+            let exportLast  = removeControlText.indexOf('}',exportStart);
+            let tokens = removeControlText.substr(exportStart,exportLast - exportStart).trim().split(' ');
+            if(tokens[1] = 'as'){
+                if(props[tokens[2]]){
+                    props[tokens[0].toLowerCase()] = props[tokens[2]];
+                    delete props[tokens[2]];
+                }
+            }
+            exportStart = exportLast + 1;
+        }else{
+            exportStart = exportStart + 8;
+        }
+        exportStart = removeControlText.indexOf(" export ", exportStart);  
+    }
+}
+
 
 //--------------------------------------------------------------------------------
 //  ドキュメントの子コンポーネントのHTMLを取り込み、SASS,SCSSを変換し
@@ -180,8 +335,8 @@ function setChildCompornents(doc:Document, parentFolderPath:string, compornents:
             const compornentDoc = compornentDOM.window.document;
             const parentPath = targetFilePath.substr(0, targetFilePath.lastIndexOf("/"));
             returnCss = returnCss + "\n" + getChildAndConvertCss(compornentDoc, parentPath);
-             for(let i = 0;i < targetTags.length; i ++){
-                targetTags[i].innerHTML = compornentDoc.body.innerHTML;
+            for(let i = 0;i < targetTags.length; i ++){
+                targetTags[i].outerHTML = getConvertedHtml( targetTags[i], compornentDoc);
             }
         }
         
@@ -371,7 +526,6 @@ function setSveltHtml(baseDOM:JSDOM, svelteDoc:Document){
         insertElement.innerHTML = svelteDoc.body.innerHTML;
     }
 }
-
 
 //--------------------------------------------------------------------------------
 // 一時ファイルのブラウザ表示
