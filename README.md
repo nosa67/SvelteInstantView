@@ -40,4 +40,7 @@ support editting file view.
 
 # 0.1.1
 support child compornent static attributes.(not support script function.)
-　
+
+# 0.1.2
+fixed two bugs. one is that import not svelte files.
+Another is the stop with error when a svelte file is not exist.

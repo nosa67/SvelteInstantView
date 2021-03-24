@@ -302,7 +302,12 @@ function getImportList(doc:Document): { [key: string] : string; } {
                     key = key.replace("{","").replace("}","").trim();
                     let importFile = scriptText.substr(fromStart + 5, lineEnd - (fromStart + 5));
                     importFile = importFile.replace(/\"/g,"").replace(/\'/g,"").trim();
-                    compornents[key] = importFile;
+                    if(importFile.substr(importFile.lastIndexOf('.') + 1).toLowerCase() === 'svelte')
+                    {
+                        if(fs.existsSync(importFile)){
+                            compornents[key] = importFile;
+                        }
+                    }
                     startIndex = lineEnd;
                 }
                 else{
@@ -557,7 +562,7 @@ function deleteSvelteTempFIle()
         if(cssTempFile.length > 0){
             fs.unlinkSync(cssTempFile);
         }
-      }, 10000);
+      }, 5000);
 }
 
 //====================================================================================================
