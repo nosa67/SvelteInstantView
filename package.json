@@ -4,7 +4,7 @@
 	"repository": "https://github.com/nosa67/SvelteInstantView.git",
 	"displayName": "Svelte Instant Viewer",
 	"description": "Show html file in the browser without transpile. But JavaScript does not work.",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"engines": {
 		"vscode": "^1.53.0"
 	},

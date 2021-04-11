@@ -50,3 +50,6 @@ fixed a bug when filepath has parent folder path '../'.
 
 # 0.2.0
 Reamde the code to analize Svelte file.
+
+# 0.2.1
+Could not publish correctly　Ver. 0.2.0
