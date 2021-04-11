@@ -4,6 +4,7 @@ import * as path from 'path';
 import {JSDOM}  from 'jsdom';
 import * as fs from 'fs';
 import * as sass from 'sass';
+import {SvelteDoc} from './svelteDoc';
 
 const fileAddition:string = "_tmpview";
 
@@ -62,17 +63,21 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         const baseDOM = new JSDOM(baseHtml);
     
         // svelteファイルを読み込んでDocumentを取得する
-        let svelteHtml = (tetDoc === undefined )?fs.readFileSync(svelteFilePath, 'utf8'):tetDoc;
-        const svelteDoc = new JSDOM(svelteHtml).window.document;
-        // removeAllScriptTags(svelteDoc);
-        
-        // svelteファイルの存在するフォルダを取得
-        let lastFolderPos = Math.max(svelteFilePath.lastIndexOf("\\"),svelteFilePath.lastIndexOf("/"));
-        const parentPath = svelteFilePath.substr(0, lastFolderPos);
+        // let svelteHtml = (tetDoc === undefined )?fs.readFileSync(svelteFilePath, 'utf8'):tetDoc;
+        let svelteDoc = new SvelteDoc();
+        svelteDoc.readFile(svelteFilePath);
+        let cssAllText = svelteDoc.getCss();
 
-        // svelteファイルで利用コンポーネントのタグを埋め込み、それぞれのスタイルをダミーのクラスセレクタに変更する。変更した全てのCSSデータを受け取る
-        classIndex = 1;
-        let cssAllText = getChildAndConvertCss(svelteDoc,parentPath);
+        // const svelteDoc = new JSDOM(svelteHtml).window.document;
+        // // removeAllScriptTags(svelteDoc);
+        
+        // // svelteファイルの存在するフォルダを取得
+        // let lastFolderPos = Math.max(svelteFilePath.lastIndexOf("\\"),svelteFilePath.lastIndexOf("/"));
+        // const parentPath = svelteFilePath.substr(0, lastFolderPos);
+
+        // // svelteファイルで利用コンポーネントのタグを埋め込み、それぞれのスタイルをダミーのクラスセレクタに変更する。変更した全てのCSSデータを受け取る
+        // classIndex = 1;
+        // let cssAllText = getChildAndConvertCss(svelteDoc,parentPath);
 
         // ベースファイルからsvelteのjavascriptを除去する(設定の「disableScript」に設定されている文字列をsrcに含むscriptタグ)
         exceptSvelteScript(baseDOM);
@@ -81,7 +86,7 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         changeRootRfPath(baseDOM);
 
         // svelteファイルのhtmlをベースファイルのドキュメントに埋め込み
-        setSveltHtml(baseDOM, svelteDoc);
+        setSveltHtml(baseDOM, svelteDoc.getHtml({}));
 
         // ベースファイルのパスの拡張子を除いたものを取得
         let tmpFileBasePath = baseFilePath.substr(0,baseFilePath.lastIndexOf("."));
@@ -97,10 +102,12 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         cssLinkElement.setAttribute("href", cssFileOnlyName);
         baseDOM.window.document.getElementsByTagName("HEAD")[0].appendChild(cssLinkElement);
 
+        // const htmlData = removeSvelteCodes(baseDOM.window.document.body.innerHTML);
         baseDOM.window.document.body.innerHTML = removeSvelteCodes(baseDOM.window.document.body.innerHTML);
 
         // svelteの一時ファイルを出力
         svelteTempFile = tmpFileBasePath + fileAddition + ".html";
+        // fs.writeFileSync(svelteTempFile, htmlData);
         fs.writeFileSync(svelteTempFile, baseDOM.serialize());
 
         return svelteTempFile;
@@ -142,16 +149,23 @@ function removeSvelteCodes(source:string) : string{
 
     let svelteCodeStart = source.indexOf('{');    
     
-    if(svelteCodeStart < 0){
-        return source;
-    }else{
+    let result = "";
+
+    while(svelteCodeStart >= 0){
+        result += source.substr(startIndex, svelteCodeStart - startIndex);
         let svelteCodeEnd =  getLastKakko(source, svelteCodeStart + 1);
         if(svelteCodeEnd >=source.length){
-            return source.substr(0,svelteCodeStart);
+            break;
         }else{
-            return source.substr(0,svelteCodeStart) + removeSvelteCodes(source.substr(svelteCodeEnd));
+            startIndex = svelteCodeEnd;
+            svelteCodeStart = source.indexOf('{', startIndex);    
         }
     }
+    if(startIndex < source.length){
+        result += source.substr(startIndex);
+    }
+    result = result.replace(/&gt;/g,'> ');
+    return result;
 }
 
 // 文字列の{が始まった位置から最終的な}の位置を取得する（最終的に閉じられていない場合は文字列の最終位置を取得する）
@@ -189,6 +203,11 @@ function getConvertedHtml(tagElement:Element, compornentDoc:Document):string{
         replacePropAliases(props, compornentDoc.scripts[i].text);
     }
 
+    let sctags = compornentDoc.getElementsByTagName('script');
+    for(let i = 0; i < compornentDoc.children.length; i ++){
+        sctags[i].remove();
+    }
+
     //  コンポーネント内で屋の属性を引き継いだ変数が設定されている部分に反映させる
     let resultHtml = "";
     for(let i = 0; i < compornentDoc.children.length; i ++)
@@ -214,9 +233,9 @@ function getConvertedHtml(tagElement:Element, compornentDoc:Document):string{
                 if(props[param.toLowerCase()]){
                     resultHtml += props[param.toLowerCase()] + ' '; 
                 }
-                else{
-                    resultHtml += param;
-                }
+                // else{
+                //     resultHtml += param;
+                // }
             }
             
             // svelteのコードの最終位置から同じ処理を繰り返す
@@ -297,6 +316,9 @@ function getImportList(doc:Document): { [key: string] : string; } {
             let fromStart = scriptText.indexOf("from ", startIndex);
             if(fromStart >= 0){
                 let lineEnd = scriptText.indexOf(";", fromStart);
+                if(scriptText.indexOf("\n", fromStart) < lineEnd){
+                    lineEnd = scriptText.indexOf("\n", fromStart);
+                } 
                 if(lineEnd >= 0){
                     let key = scriptText.substr(startIndex + 7, fromStart - (startIndex + 7));
                     key = key.replace("{","").replace("}","").trim();
@@ -304,9 +326,7 @@ function getImportList(doc:Document): { [key: string] : string; } {
                     importFile = importFile.replace(/\"/g,"").replace(/\'/g,"").trim();
                     if(importFile.substr(importFile.lastIndexOf('.') + 1).toLowerCase() === 'svelte')
                     {
-                        if(fs.existsSync(importFile)){
-                            compornents[key] = importFile;
-                        }
+                        compornents[key] = importFile;
                     }
                     startIndex = lineEnd;
                 }
@@ -334,14 +354,18 @@ function setChildCompornents(doc:Document, parentFolderPath:string, compornents:
     Object.keys(compornents).forEach(key => {
         let targetTags = doc.body.getElementsByTagName(key);
         if(targetTags.length > 0){
-            let targetFilePath = parentFolderPath + "/" + compornents[key];
-            var compornentHtml = fs.readFileSync(targetFilePath, 'utf8');     // パスのファイルを読み込む
-            const compornentDOM = new JSDOM(compornentHtml);                        // 読み込んだファイルをDOMにする
-            const compornentDoc = compornentDOM.window.document;
-            const parentPath = targetFilePath.substr(0, targetFilePath.lastIndexOf("/"));
-            returnCss = returnCss + "\n" + getChildAndConvertCss(compornentDoc, parentPath);
-            for(let i = 0;i < targetTags.length; i ++){
-                targetTags[i].outerHTML = getConvertedHtml( targetTags[i], compornentDoc);
+            //path.join()
+            let targetFilePath = path.join(parentFolderPath , compornents[key]);
+            let targetFilePathOld = parentFolderPath + "/" + compornents[key];
+            if(fs.existsSync(targetFilePath)){
+                var compornentHtml = fs.readFileSync(targetFilePath, 'utf8');     // パスのファイルを読み込む
+                const compornentDOM = new JSDOM(compornentHtml);                        // 読み込んだファイルをDOMにする
+                const compornentDoc = compornentDOM.window.document;
+                const parentPath = targetFilePath.substr(0, targetFilePath.lastIndexOf("/"));
+                returnCss = returnCss + "\n" + getChildAndConvertCss(compornentDoc, parentPath);
+                for(let i = 0;i < targetTags.length; i ++){
+                    targetTags[i].outerHTML = getConvertedHtml( targetTags[i], compornentDoc);
+                }
             }
         }
         
@@ -520,7 +544,7 @@ function changeRootRfPath(baseDOM:JSDOM){
 //--------------------------------------------------------------------------------
 // svelteファイルのhtmlをベースファイルのドキュメントに埋め込み
 //--------------------------------------------------------------------------------
-function setSveltHtml(baseDOM:JSDOM, svelteDoc:Document){
+function setSveltHtml(baseDOM:JSDOM, svelteHtml:string){
 
     let insertElementTagselector = vscode.workspace.getConfiguration('svelte-instant-view').get<string>('insertTagSelector');
     if(insertElementTagselector !== undefined){
@@ -528,7 +552,7 @@ function setSveltHtml(baseDOM:JSDOM, svelteDoc:Document){
         if(insertElement === null){
             throw new Error("Can't find TAG(selector = " + vscode.workspace.getConfiguration('svelte-instant-view').get('insertTagSelector') + ") in base html.");
         }
-        insertElement.innerHTML = svelteDoc.body.innerHTML;
+        insertElement.innerHTML = svelteHtml;
     }
 }
 

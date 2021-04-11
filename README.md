@@ -44,3 +44,9 @@ support child compornent static attributes.(not support script function.)
 # 0.1.2
 fixed two bugs. one is that import not svelte files.
 Another is the stop with error when a svelte file is not exist.
+
+# 0.1.2
+fixed a bug when filepath has parent folder path '../'.
+
+# 0.2.0
+Reamde the code to analize Svelte file.
