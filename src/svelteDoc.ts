@@ -3,13 +3,15 @@
 //================================================================================
 // 終了タブが不要なタグ名
 const singleTags = [
-    'br','img','hr','meta','input','embed','area','base','col','keygen','link','param','source'
+    'br','img','hr','meta','input','embed','area','base','col','keygen','link','param','source', '!--'
 ];
+
+const novalueAttrs = ['disabled','readonly'];
 
 // Svelteの制御処理判定文字列
 const svelteControlMarks = ['#',':','/'];
 
-import {multiIndexOf, getPlacefolderEnd, getTagEnd, passSpaceAndTab, getAttrValue} from './utility';
+import {multiIndexOf, getPlacefolderEnd, getTagEnd, passSpaceAndTab, getAttrValue, getCommentEnd, getReflectVariablesText} from './utility';
 
 //================================================================================
 //  基本インタフェース
@@ -37,37 +39,38 @@ class SvelteText implements SveltePart{
     // html文字列の取得
     public getHtml(variables:{[key:string]:string},compornents:{ [key: string] :SvelteDoc}):string{
 
-        let evalScriptBase ="(function(){";
-        for(let setAttr in variables){
-            evalScriptBase += "let " + setAttr + "='" + variables[setAttr] + "'\n";
-        }
+        return getReflectVariablesText(this.text, variables);
+        // let evalScriptBase ="(function(){";
+        // for(let setAttr in variables){
+        //     evalScriptBase += "let " + setAttr + "='" + variables[setAttr] + "'\n";
+        // }
 
-        let current = 0;
-        let resultText = "";
-        let startIndex = this.text.indexOf('{');
-        while(startIndex >= 0){
-            let endIndex = getPlacefolderEnd(this.text, startIndex);
-            if(endIndex >= 0){
-                let name = this.text.substr(startIndex + 1,endIndex - startIndex - 1);
-                const evalScript = evalScriptBase + "return " + name + "})()";
-                let evalValue = "";
-                try{
-                    evalValue = eval(evalScript);
-                }catch{
-                }
-                resultText = this.text.substr(current, startIndex - current) + evalValue;
-                current = endIndex + 1;
-            }else{
-                break;
-            }
-            startIndex = this.text.indexOf('{', current);
-        }
+        // let current = 0;
+        // let resultText = "";
+        // let startIndex = this.text.indexOf('{');
+        // while(startIndex >= 0){
+        //     let endIndex = getPlacefolderEnd(this.text, startIndex);
+        //     if(endIndex >= 0){
+        //         let name = this.text.substr(startIndex + 1,endIndex - startIndex - 1);
+        //         const evalScript = evalScriptBase + "return " + name + "})()";
+        //         let evalValue = "";
+        //         try{
+        //             evalValue = eval(evalScript);
+        //         }catch{
+        //         }
+        //         resultText = this.text.substr(current, startIndex - current) + evalValue;
+        //         current = endIndex + 1;
+        //     }else{
+        //         break;
+        //     }
+        //     startIndex = this.text.indexOf('{', current);
+        // }
 
-        if(current < this.text.length){
-            resultText += this.text.substr(current);
-        }
+        // if(current < this.text.length){
+        //     resultText += this.text.substr(current);
+        // }
 
-        return resultText;
+        // return resultText;
     }
 }
 
@@ -80,7 +83,7 @@ class SvelteTag implements SveltePart{
     public tagName = "";                                            // タグ名
     public attributes:{[index: string]: string} = {};    // 属性の連想配列
     public contents:SveltePart[] = [];                              // 内部のコンテンツリスト
-    public placeFolderAttributes:{[index: string]: string} = {};    // プレースフォルダとなっている属性の連想配列
+    // public placeFolderAttributes:{[index: string]: string} = {};    // プレースフォルダとなっている属性の連想配列
 
     // コンストラクタ
     // [引数]   tagName     タグ名
@@ -103,29 +106,29 @@ class SvelteTag implements SveltePart{
     public getChangedAttributes(variables:{[key:string]:string}):{[key:string]:string}{
         let result:{[key:string]:string} = {};
         
-        // 固定の属性データをコピー
-        for(let attr in this.attributes){
-            result[attr] = this.attributes[attr];
-        }
+        // // 固定の属性データをコピー
+        // for(let attr in this.attributes){
+        //     result[attr] = this.attributes[attr];
+        // }
 
-        // 引数の全ての変数とその内容をletのjavascript文字列にする
-        let evalScriptBase ="(function(){";
-        for(let setAttr in variables){
-            evalScriptBase += "let " + setAttr + "='" + variables[setAttr] + "'\n";
-        }
+        // // 引数の全ての変数とその内容をletのjavascript文字列にする
+        // let evalScriptBase ="(function(){";
+        // for(let setAttr in variables){
+        //     evalScriptBase += "let " + setAttr + "='" + variables[setAttr] + "'\n";
+        // }
     
         // プレースフォルダの属性情報を変更してコピー
-        for(let attr in this.placeFolderAttributes){
+        for(let attr in this.attributes){
 
             if(attr.substr(0,2) !== 'on'){
-                const evalScript = evalScriptBase + "return " + this.placeFolderAttributes[attr].substr(1,this.placeFolderAttributes[attr].length -2) + "})()";
-                let evalValue = "";
-                try{
-                    evalValue = eval(evalScript).toString();
-                }catch{
-                }
+                // const evalScript = evalScriptBase + "return " + this.attributes[attr].substr(1,this.attributes[attr].length -2) + "})()";
+                // let evalValue = "";
+                // try{
+                //     evalValue = eval(evalScript).toString();
+                // }catch{
+                // }
 
-                result[attr] = evalValue;
+                result[attr] = getReflectVariablesText(this.attributes[attr], variables);
             }
         }
 
@@ -138,53 +141,64 @@ class SvelteTag implements SveltePart{
         // タグの開始部分を作成
         let result = "<" + this.tagName;
         
-        // 固定の属性データを設定
-        for(let attr in this.attributes){
-            if(this.attributes[attr].indexOf('"') >= 0){
-                result += " " + attr + "='" + this.attributes[attr] + "'";
-            }else{
-                result += " " + attr + '="' + this.attributes[attr] + '"';
-            }
-        }
+        // // 固定の属性データを設定
+        // for(let attr in this.attributes){
+        //     if(this.attributes[attr].indexOf('"') >= 0){
+        //         result += " " + attr + "='" + this.attributes[attr] + "'";
+        //     }else{
+        //         result += " " + attr + '="' + this.attributes[attr] + '"';
+        //     }
+        // }
 
         // 引数の全ての変数とその内容をletのjavascript文字列にする
-        let evalScriptBase ="(function(){";
-        for(let setAttr in variables){
-            evalScriptBase += "let " + setAttr + "='" + variables[setAttr] + "'\n";
-        }
+        // let evalScriptBase ="(function(){";
+        // for(let setAttr in variables){
+        //     evalScriptBase += "let " + setAttr + "='" + variables[setAttr] + "'\n";
+        // }
     
         // プレースフォルダの属性情報を作成
-        for(let attr in this.placeFolderAttributes){
+        for(let attr in this.attributes){
 
             if(attr.substr(0,2) !== 'on'){
-                let replacedText = "";
-                let text = this.placeFolderAttributes[attr];
-                let current = 0;
-                let startIndex = text.indexOf('{');
-                while(startIndex >= 0){
-                    if(current < startIndex){
-                        replacedText += text.substr(current,startIndex- current);
-                    }
-                    let endIndex = getPlacefolderEnd(text, startIndex);
-                    if(endIndex < 0){
-                        endIndex = text.length;
-                    }
-                    current = endIndex + 1;
-                    const evalScript = evalScriptBase + "return " + text.substr(startIndex + 1, endIndex - startIndex - 1) + "})()";
-                    try{
-                        replacedText += eval(evalScript).toString();
-                    }catch{
-                    }
-                    startIndex = text.indexOf('{', endIndex);
-                }
-                if(current < text.length - 1){
-                    replacedText = text.substr(current);
-                }
+                let replacedText = getReflectVariablesText(this.attributes[attr],variables);
+                // let text = this.attributes[attr];
+                // let current = 0;
+                // let startIndex = text.indexOf('{');
+                // while(startIndex >= 0){
+                //     if(current < startIndex){
+                //         replacedText += text.substr(current,startIndex- current);
+                //     }
+                //     let endIndex = getPlacefolderEnd(text, startIndex);
+                //     if(endIndex < 0){
+                //         endIndex = text.length;
+                //     }
+                //     current = endIndex + 1;
+                //     const evalScript = evalScriptBase + "return " + text.substr(startIndex + 1, endIndex - startIndex - 1) + "})()";
+                //     try{
+                //         replacedText += eval(evalScript).toString();
+                //     }catch{
+                //     }
+                //     startIndex = text.indexOf('{', endIndex);
+                // }
+                // if(current < text.length - 1){
+                //     replacedText = text.substr(current);
+                // }
 
-                if(replacedText.indexOf('"') >= 0){
-                    result += " " + attr + "='" + replacedText + "'";
+                if(novalueAttrs.includes(attr.toLowerCase())){
+                    try{
+                        let boolVal = eval(replacedText);
+                        if(boolVal){
+                            result += " " + attr;
+                        }
+                    }catch{
+                        // result += " " + attr;
+                    }
                 }else{
-                    result += " " + attr + '="' + replacedText + '"';
+                    if(replacedText.indexOf('"') >= 0){
+                        result += " " + attr + "='" + replacedText + "'";
+                    }else{
+                        result += " " + attr + '="' + replacedText + '"';
+                    }
                 }
             }
         }
@@ -194,6 +208,11 @@ class SvelteTag implements SveltePart{
             result += "/";
         }
 
+        // コメントタグの対応
+        if(this.tagName === '!--'){
+            result += "--";
+        }
+        
         // タグの終了カッコ(>)を設定
         result += ">";
         
@@ -454,14 +473,11 @@ export class SvelteDoc{
         while(startIndex >= 0){
             let fromStart = this.scriptsText.indexOf("from ", startIndex);
             if(fromStart >= 0){
-                let lineEnd = this.scriptsText.indexOf(";", fromStart);
-                if(this.scriptsText.indexOf("\n", fromStart) < lineEnd){
-                    lineEnd = this.scriptsText.indexOf("\n", fromStart);
-                } 
-                if(lineEnd >= 0){
+                let lineEndInfo = multiIndexOf(this.scriptsText, fromStart, [';','\n']);
+                if(lineEndInfo.index >= 0){
                     let key = this.scriptsText.substr(startIndex + 7, fromStart - (startIndex + 7));
                     key = key.replace("{","").replace("}","").trim();
-                    let importFile = this.scriptsText.substr(fromStart + 5, lineEnd - (fromStart + 5));
+                    let importFile = this.scriptsText.substr(fromStart + 5, lineEndInfo.index - (fromStart + 5));
                     importFile = importFile.replace(/\"/g,"").replace(/\'/g,"").trim();
                     if(importFile.substr(importFile.lastIndexOf('.') + 1).toLowerCase() === 'svelte')
                     {
@@ -469,7 +485,7 @@ export class SvelteDoc{
                         doc.readFile(path.join(currentPath, importFile));
                         this.compornents[key] = doc;
                     }
-                    startIndex = lineEnd;
+                    startIndex = lineEndInfo.index;
                 }
                 else{
                     startIndex = fromStart; 
@@ -639,8 +655,12 @@ export class SvelteDoc{
             let valEnd = text.indexOf("'", index + 1);
             return {key:valName, val:text.substr(index + 1,valEnd - index - 1 ), index:(valEnd + 1)};
         }else{
-            // 文字列でなければ変数は空文字列を値として返す
-            return {key:valName, val:"", index:(index + 1)};
+            let tmpVal = getAttrValue(text, index);
+            try{
+                return {key:valName, val:eval(tmpVal.attrVal), index:(index + 1)};
+            }catch{
+                return {key:valName, val:"", index:(index + 1)};
+            }
         }
     }
 
@@ -681,7 +701,12 @@ export class SvelteDoc{
             }
 
             // タグの終了位置を取得
-            var tagEnd = getTagEnd(fileText, tagStart);
+            if(fileText.substr(tagStart,4) === '<!--'){
+                var tagEnd = getCommentEnd(fileText, tagStart);
+            }else{
+                var tagEnd = getTagEnd(fileText, tagStart);
+            }
+           
             
             // タグ内の文字列からタグを作成する
             const tagStr = fileText.substr(tagStart + 1, tagEnd - tagStart - 1).trim();
@@ -716,7 +741,11 @@ export class SvelteDoc{
                 if(singleTags.indexOf(tagName.toLowerCase()) >= 0){
                     // 終了タグが無いものは単一タグを追加する
                     parts.push(new SvelteTag(tagName, tagText));
-                    startIndex = tagEnd + 1;
+                    if(tagName === '!--'){
+                        startIndex = tagEnd + 3;
+                    }else{
+                        startIndex = tagEnd + 1;
+                    }
                 }else{
                     if(tagName.toLowerCase() === 'script'){
                         const scriptEnd = fileText.indexOf('/script', tagEnd + 1);
@@ -781,7 +810,7 @@ export class SvelteDoc{
 
             // 開始位置までの文字列はそのまま追加
             if(startIndex > current){
-                result += text.substr(current, startIndex - current);
+                result += text.substr(current, startIndex - current).trim();
             } 
 
             // {}内の文字列を単語に分割

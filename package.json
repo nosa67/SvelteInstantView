@@ -36,7 +36,7 @@
 					"when": "resourceExtname == .svelte"
 				}
 			],
-			"editor/context" :[
+			"editor/context": [
 				{
 					"command": "svelte-instant-view.showeditting",
 					"when": "resourceExtname == .svelte"
