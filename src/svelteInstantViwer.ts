@@ -3,7 +3,6 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {JSDOM}  from 'jsdom';
 import * as fs from 'fs';
-import {SvelteDoc} from './svelteDoc';
 import {SvelteDoc2} from './svelteDoc2';
 
 const fileAddition:string = "_tmpview";
@@ -13,7 +12,6 @@ const styleNameHeader = "dmy-class-";
 
 let cssTempFile:string;
 let svelteTempFile:string;
-// let classIndex =1;
 
 //====================================================================================================
 //  svelteのインスタントビューを表示
@@ -61,27 +59,13 @@ function createTempSvelteFile(context: vscode.ExtensionContext, svelteFilePath:s
         let baseFilePath =  path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, "" + vscode.workspace.getConfiguration('svelte-instant-view').get('baseFile'));
         var baseHtml = fs.readFileSync(baseFilePath, 'utf8');
         const baseDOM = new JSDOM(baseHtml);
-    
-        // svelteファイルを読み込んでDocumentを取得する
-        // let svelteHtml = (tetDoc === undefined )?fs.readFileSync(svelteFilePath, 'utf8'):tetDoc;
-        // let svelteDoc = new SvelteDoc();
-        // svelteDoc.readFile(svelteFilePath);
-        // let cssAllText = svelteDoc.getCss();
 
+        // 対象のSvelteファイルを読み込む
         let svelteDoc2 = new SvelteDoc2();
         let sss = svelteDoc2.readFile(svelteFilePath);
+
+        // スコープになるように変更したCSS情報を取得
         let cssAllText = svelteDoc2.getCss();
-
-        // const svelteDoc = new JSDOM(svelteHtml).window.document;
-        // // removeAllScriptTags(svelteDoc);
-        
-        // // svelteファイルの存在するフォルダを取得
-        // let lastFolderPos = Math.max(svelteFilePath.lastIndexOf("\\"),svelteFilePath.lastIndexOf("/"));
-        // const parentPath = svelteFilePath.substr(0, lastFolderPos);
-
-        // // svelteファイルで利用コンポーネントのタグを埋め込み、それぞれのスタイルをダミーのクラスセレクタに変更する。変更した全てのCSSデータを受け取る
-        // classIndex = 1;
-        // let cssAllText = getChildAndConvertCss(svelteDoc,parentPath);
 
         // ベースファイルからsvelteのjavascriptを除去する(設定の「disableScript」に設定されている文字列をsrcに含むscriptタグ)
         exceptSvelteScript(baseDOM);
@@ -191,290 +175,6 @@ function getLastKakko(source:string, startIndex:number):number{
     }
     return startIndex;
 }
-
-// 親コンポーネントで指定されている属性値で子コンポーネントのHTMドキュメントの内容を調整する（静的な属性を反映させる。スクリプトやバインド変数は反映させていない）
-// function getConvertedHtml(tagElement:Element, compornentDoc:Document):string{
-    
-//     // タグの属性を取得する
-//     let props:{[index: string]: string} = {};
-//     for(let i = 0; i < tagElement.attributes.length; i ++){
-//         props[tagElement.attributes[i].name] = tagElement.attributes[i].value;
-//     }
-    
-//     // 取得したタグの属性からコンポーネントのexportで名前を変更されている物を反映させる（export b as a）
-//     for(let i = 0; i < compornentDoc.scripts.length; i ++)
-//     {
-//         replacePropAliases(props, compornentDoc.scripts[i].text);
-//     }
-
-//     let sctags = compornentDoc.getElementsByTagName('script');
-//     for(let i = 0; i < compornentDoc.children.length; i ++){
-//         sctags[i].remove();
-//     }
-
-//     //  コンポーネント内で屋の属性を引き継いだ変数が設定されている部分に反映させる
-//     let resultHtml = "";
-//     for(let i = 0; i < compornentDoc.children.length; i ++)
-//     {
-//         let scriptSource = compornentDoc.children[i].outerHTML;
-//         let current = 0;
-//         let startKakko = scriptSource.indexOf('{'); // svelteの開始位置を取得
-//         while(startKakko >= 0){
-//             // 開始位置までの文字列はそのまま返す為に格納
-//             resultHtml += scriptSource.substr(current, startKakko - current);
-
-//             // svelteのソースの最後を取得
-//             let endKakko = getLastKakko(scriptSource,startKakko + 1);
-
-//             //　svelteの最終位置と{の位置を比較して早い方までが変数の可能性があるのでその位置までの文字列を抽出して単語に分割する
-//             let deliitPos = Math.min(endKakko, scriptSource.indexOf('{', startKakko+1));
-//             let paramtext = scriptSource.substr(startKakko + 1, deliitPos - startKakko - 2).trim();
-//             paramtext = paramtext.replace(/\t/g," ").replace(/,/g,' , ').replace(/;/g,' ; ');
-//             let splitParamtext = paramtext.split(' ');
-
-//             // 分割した単語が親コンポーネントで定義した属性の場合のみ変更して設定する
-//             for(let param of splitParamtext){
-//                 if(props[param.toLowerCase()]){
-//                     resultHtml += props[param.toLowerCase()] + ' '; 
-//                 }
-//                 // else{
-//                 //     resultHtml += param;
-//                 // }
-//             }
-            
-//             // svelteのコードの最終位置から同じ処理を繰り返す
-//             current = endKakko;
-//             startKakko = scriptSource.indexOf('{', current);
-//         }
-
-//         // 最後の残り部分を追加する
-//         if(current < scriptSource.length){
-//             resultHtml += scriptSource.substr(current);
-//         }
-//     }
-
-//     // 最終的にできたHTMLを返す
-//     return resultHtml;
-// }
-
-// 親コンポーネントで設定していた属性名とその値の連想配列で、exportで実際の変数名が変更されている場合、連想配列のキーをそれに置き換える
-// function replacePropAliases(props:{[index: string]: string}, scriptSource:string){
-
-//     let removeControlText =  scriptSource.replace(/[\n|\r\n|\r|\t|　]/g, ' ');  // 改行、タブ、全角スペースを半角スペースに変換
-//     removeControlText = removeControlText.replace(/ +/g, ' ');                  // 半角スペースの連続を1つにする
-//     let exportStart = removeControlText.indexOf(" export ");                    // exportを探す
-//     if(exportStart >= 0){
-//         if(removeControlText[exportStart + 8] === '{')
-//         {
-//             exportStart += 9;
-//             let exportLast  = removeControlText.indexOf('}',exportStart);
-//             let tokens = removeControlText.substr(exportStart,exportLast - exportStart).trim().split(' ');
-//             if(tokens[1] = 'as'){
-//                 if(props[tokens[2]]){
-//                     props[tokens[0].toLowerCase()] = props[tokens[2]];
-//                     delete props[tokens[2]];
-//                 }
-//             }
-//             exportStart = exportLast + 1;
-//         }else{
-//             exportStart = exportStart + 8;
-//         }
-//         exportStart = removeControlText.indexOf(" export ", exportStart);  
-//     }
-// }
-
-
-//--------------------------------------------------------------------------------
-//  ドキュメントの子コンポーネントのHTMLを取り込み、SASS,SCSSを変換し
-//  CSSをスコープになるようにユニーク名のクラスに変換
-//  最終的に統合したCSSデータを返す。
-//--------------------------------------------------------------------------------
-// function getChildAndConvertCss(svelteDoc:Document, parentFolderPath:string)
-// {
-//     // CSSを変換して取得する（ユニークなクラスにして、ドキュメント内も変換しておく）
-//     let returnCss = getConvertCss(svelteDoc.body);
-
-//     // スクリプトのimportのリストを取得する
-//     var compornents = getImportList(svelteDoc);
-
-//     // importリストを利用して、子コンポーネントを置き換える。配下のCSSが返ってくるので追加する
-//     returnCss += setChildCompornents(svelteDoc, parentFolderPath, compornents);
-
-//     // 全てのCSSのテキスト返す
-//     return returnCss;
-// }
-
-//--------------------------------------------------------------------------------
-// スクリプトのimportのリストを取得する
-//--------------------------------------------------------------------------------
-// function getImportList(doc:Document): { [key: string] : string; } {
-
-//     // importに設定されている子コンポーネントと思われる物のリスト（名前と相対ファイル名）
-//     var compornents: { [key: string] : string; } = {};
-
-//     // svelteのボディーからスクリプトタグのimportを調べて再帰的に設定する
-//     for(let i = 0;i < doc.scripts.length;i ++){
-//         const scriptText = doc.scripts[i].innerHTML;
-//         let startIndex = scriptText.indexOf("import ");
-//         while(startIndex >= 0){
-//             let fromStart = scriptText.indexOf("from ", startIndex);
-//             if(fromStart >= 0){
-//                 let lineEnd = scriptText.indexOf(";", fromStart);
-//                 if(scriptText.indexOf("\n", fromStart) < lineEnd){
-//                     lineEnd = scriptText.indexOf("\n", fromStart);
-//                 } 
-//                 if(lineEnd >= 0){
-//                     let key = scriptText.substr(startIndex + 7, fromStart - (startIndex + 7));
-//                     key = key.replace("{","").replace("}","").trim();
-//                     let importFile = scriptText.substr(fromStart + 5, lineEnd - (fromStart + 5));
-//                     importFile = importFile.replace(/\"/g,"").replace(/\'/g,"").trim();
-//                     if(importFile.substr(importFile.lastIndexOf('.') + 1).toLowerCase() === 'svelte')
-//                     {
-//                         compornents[key] = importFile;
-//                     }
-//                     startIndex = lineEnd;
-//                 }
-//                 else{
-//                     startIndex = fromStart; 
-//                 }
-//             }else{
-//                 startIndex = startIndex + 7;
-//             }
-//             startIndex = scriptText.indexOf("import ", startIndex);
-//         }
-//     }
-
-//     return compornents;
-// }
-
-//--------------------------------------------------------------------------------
-// importリストを利用して、子コンポーネントを置き換える
-//--------------------------------------------------------------------------------
-// function setChildCompornents(doc:Document, parentFolderPath:string, compornents:{ [key: string] : string; }) : string{
-
-//     let returnCss = "";
-
-//     // 全てのコンポーネントリストを処理する
-//     Object.keys(compornents).forEach(key => {
-//         let targetTags = doc.body.getElementsByTagName(key);
-//         if(targetTags.length > 0){
-//             //path.join()
-//             let targetFilePath = path.join(parentFolderPath , compornents[key]);
-//             let targetFilePathOld = parentFolderPath + "/" + compornents[key];
-//             if(fs.existsSync(targetFilePath)){
-//                 var compornentHtml = fs.readFileSync(targetFilePath, 'utf8');     // パスのファイルを読み込む
-//                 const compornentDOM = new JSDOM(compornentHtml);                        // 読み込んだファイルをDOMにする
-//                 const compornentDoc = compornentDOM.window.document;
-//                 const parentPath = targetFilePath.substr(0, targetFilePath.lastIndexOf("/"));
-//                 returnCss = returnCss + "\n" + getChildAndConvertCss(compornentDoc, parentPath);
-//                 for(let i = 0;i < targetTags.length; i ++){
-//                     targetTags[i].outerHTML = getConvertedHtml( targetTags[i], compornentDoc);
-//                 }
-//             }
-//         }
-        
-//     });
-
-//     return returnCss;
-// }
-
-//--------------------------------------------------------------------------------
-// cssをスコープにするためにセレクタを特別な名称のクラスセレクタに変更し、タグのclas属性の先頭に挿入する
-//--------------------------------------------------------------------------------
-// function getConvertCss(htmlBody:HTMLElement)
-// {
-//     // スタイルシートのタグリストを取得する
-//     let styleElements = htmlBody.getElementsByTagName("style");
-
-//     // 全てのスタイルシートの情報をCSSで取得する（sassやscssは変換する）
-//     let allCss = getAllStyles(styleElements);
-
-//     // 既存のスタイルタグをすべて削除する
-//     for (var i = 0; i < styleElements.length; i++) {
-//         let parent = styleElements[i].parentElement;
-//         if(parent !== null){
-//             parent.removeChild(styleElements[i]);
-//         }
-//     }
-
-//     if(allCss.length > 0){
-//         // 取得したスタイルのセレクタをユニークなクラスにしてHTMLのclassの先頭に追加。返還後のCSSを返す
-//         return setConvertedStyles(htmlBody, allCss);
-//     }else{
-//         return "";
-//     }
-// }
-
-
-
-//--------------------------------------------------------------------------------
-// 取得したスタイルのセレクタをユニークなクラスにしてHTMLのclassの先頭に追加。返還後のCSSを返す
-//--------------------------------------------------------------------------------
-// function setConvertedStyles(htmlBody:HTMLElement, allCss:string): string{
-
-//     let resultCSS = "";
-        
-//     // 全てのcssを設定したstyleタグを作成する
-//     var workStyeleElement = htmlBody.ownerDocument.createElement("style");
-//     workStyeleElement.innerHTML = allCss;
-//     htmlBody.insertBefore(workStyeleElement, htmlBody.firstChild);
-//     let styleSheet = htmlBody.ownerDocument.styleSheets[0];
-
-//     // 全てのルールをユニーク名に変更する
-//     for(let i =0; i < styleSheet.cssRules.length; i ++){
-//         let targetRule = styleSheet.cssRules[i];
-//         let dummyClassName = styleNameHeader + classIndex.toString(); 
-//         classIndex ++;
-//         let targetElements = htmlBody.querySelectorAll(getSelectorText(targetRule));
-//         for(let j = 0; j < targetElements.length; j ++){
-//             let classAttr = targetElements[j].getAttribute("class");
-//             if(classAttr === null){
-//                 targetElements[j].setAttribute("class", dummyClassName);
-//             }else{
-//                 targetElements[j].setAttribute("class", dummyClassName + " " + classAttr);
-//             }
-//         }
-//         setSelectorText(targetRule, "." + dummyClassName);
-//         resultCSS += targetRule.cssText;
-//     }
-
-//     // 作ったスタイルは削除
-//     let styleElement = htmlBody.getElementsByTagName("style")[0];
-//     let parent = styleElement.parentElement;
-//     if(parent !== null){
-//         parent.removeChild(styleElement);
-//     }
-
-//     // 結果のCSS(テキスト)を返す
-//     return resultCSS;
-// }
-
-//--------------------------------------------------------------------------------
-//  スタイルのセレクタを取得する（ちょっとダサいなー）
-//--------------------------------------------------------------------------------
-// function getSelectorText(arg: any): string {
-//     if(arg !== null){
-//             if(typeof arg === "object"){
-//             if(typeof arg.selectorText === "string"){
-//                 return arg.selectorText;
-//             }
-//         }
-//     }
-//     return "";
-// }
-
-//--------------------------------------------------------------------------------
-//  スタイルのセレクタを設定する（ちょっとダサいなー）
-//--------------------------------------------------------------------------------
-// function setSelectorText(arg: any, newValue:string) {
-//     if(arg !== null){
-//             if(typeof arg === "object"){
-//             if(typeof arg.selectorText === "string"){
-//                 arg.selectorText = newValue;
-//             }
-//         }
-//     }
-// }
 
 //--------------------------------------------------------------------------------
 /// ベースファイルからsvelteのjavascriptを除去する(設定の「disableScript」に設定されている文字列をsrcに含むscriptタグ)

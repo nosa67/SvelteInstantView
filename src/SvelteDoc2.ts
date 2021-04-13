@@ -1,7 +1,7 @@
 import {JSDOM}  from 'jsdom';
-import { utils } from 'mocha';
 import * as UTILITY from './utility';
 
+// HTMLタグの属性で値を持たず設定されるだけで有効になる属性名の配列
 const dropIfFalseAttrs = ['checked', 'required','autofocus','multiple','novalidate','hidden',
         'draggable', 'scoped','async', 'defer', 'disabled','readonly','reversed','ismap','loop'];
 
@@ -10,7 +10,9 @@ const dropIfFalseAttrs = ['checked', 'required','autofocus','multiple','novalida
 //================================================================================
 export class SvelteDoc2{
 
-    // プロパティ
+    //================================================================================
+    //  プロパティ
+    //================================================================================
     public filename = "";                                   // ファイル名（スコープcss名で利用）
     public scriptsText = "";                                // scriptのタグ内のテキスト
     public styleText = "";                                  // styleタグ内をスコープ内に変更したテキスト
@@ -18,6 +20,10 @@ export class SvelteDoc2{
     public sveltePraceFolder:{[key:string]:string} = {};    // svelteプレースフォルダ情報
     public children:{[key:string]:SvelteDoc2} = {};         // インポートしているコンテンツリスト
 
+    //================================================================================
+    //  公開メソッド
+    //================================================================================
+ 
     // テキストファイルを読み込んでタグリストを作成する
     // [引数]   filepath    読み込むファイルパス
     public readFile(filepath:string){
@@ -38,6 +44,7 @@ export class SvelteDoc2{
 
         // 配下のコンポーネントを読み込む
         this.getCompornents(path.dirname(filepath));
+
     }
 
     // スコープ化したCSSテキストの取得
@@ -71,7 +78,11 @@ export class SvelteDoc2{
                 evalValue = eval(evalScript);
             }catch{
             }
-            replaceValues.push({key:key, value:evalValue});
+            if (evalValue && typeof evalValue === 'function') {
+                replaceValues.push({key:key, value:''});
+            }else{
+                replaceValues.push({key:key, value:evalValue});
+            }
         }
 
         // 子コンポーネントのhtmlを取得して置き換える
@@ -113,31 +124,13 @@ export class SvelteDoc2{
         return "";
     }
 
+    //================================================================================
+    //  内部処理
+    //================================================================================
     
-    private replaceNotValuedAttrs(baseElement:Element) {
-        let attrNames = baseElement.getAttributeNames();
-        for(let attrName of attrNames){
-            if(dropIfFalseAttrs.includes(attrName)){
-                let attrVal = baseElement.getAttribute(attrName);
-                if(attrVal !== null){
-                    attrVal = attrVal.trim().toLowerCase();
-                    if((attrVal === '') || (attrVal === 'false')){
-                        baseElement.removeAttribute(attrName);
-                    }
-                }
-            }
-        }
-
-        for(let index=0; index < baseElement.children.length; index ++ ){
-            let child = baseElement.children[index];
-            this.replaceNotValuedAttrs( child);
-        }
-        
-    }
-
-
-    // htmlのコメントを削除する
+    // htmlのコメント<!--   ->を削除する
     // [引数]   svelteファイル内の全テキスト
+    // [返値]   コメントを削除したテキスト
     private dropComment(text:string):string{
         let startIndex = text.lastIndexOf('<!--');
         while(startIndex >= 0){
@@ -152,6 +145,37 @@ export class SvelteDoc2{
         }
 
         return text;
+    }
+            
+    // 値を持たないタグ属性（設定するだけで効果があるタグ属性）がfalseなら、その属性を削除する
+    // エレメント内のタグ属性を処理して、再帰的に子エレメントも処理することですべて処理する
+    private replaceNotValuedAttrs(baseElement:Element) {
+        // エレメントの属性名リストを取得
+        let attrNames = baseElement.getAttributeNames();
+
+        // 全ての属性を処理
+        for(let attrName of attrNames){
+
+            // 値を持たない属性リスト（このファイルの先頭で定数として既定）かどうか判定
+            if(dropIfFalseAttrs.includes(attrName)){
+
+                // 値を持たない属性にfalseが設定されている場合はその属性を削除する
+                let attrVal = baseElement.getAttribute(attrName);
+                if(attrVal !== null){
+                    attrVal = attrVal.trim().toLowerCase();
+                    if((attrVal === '') || (attrVal === 'false')){
+                        baseElement.removeAttribute(attrName);
+                    }
+                }
+            }
+        }
+
+        // 子のエレメントの子エレメントを再帰的に処理する
+        for(let index=0; index < baseElement.children.length; index ++ ){
+            let child = baseElement.children[index];
+            this.replaceNotValuedAttrs( child);
+        }
+        
     }
 
     // SvelteファイルをHTML部分、スクリプト部分、Style部分に分割する
@@ -193,7 +217,7 @@ export class SvelteDoc2{
         }
  
         // svelteの{#if}でelse以下を削除する
-        this.dropSvelteIfElse(text);
+        text = this.dropSvelteIfElse(text);
 
         // プレースフォルダの置換名を作成するための内部メソッド
         function createSveltePracefolderName(text:string,index:number){
@@ -464,7 +488,7 @@ export class SvelteDoc2{
         }
     }
 
-        // Svelteの変数の内容を取得する
+    // Svelteの変数の内容を取得する
     // [引数]   text        スクリプト
     //          startIndex  変数の開始位置（変数名の開始位置）
     // [返値]   key     変数名
@@ -520,10 +544,15 @@ export class SvelteDoc2{
             let valEnd = text.indexOf("'", index + 1);
             return {key:valName, val:text.substr(index + 1,valEnd - index - 1 ), index:(valEnd + 1)};
         }else{
-            let tmpVal = UTILITY.getAttrValue(text, index);
-            try{
-                return {key:valName, val:eval(tmpVal.attrVal), index:(index + 1)};
-            }catch{
+            let endInfo = UTILITY.multiIndexOf(text, index, [' ', '\t', '(', '{', ';']);
+            if((endInfo.findstr !== '(') && (endInfo.findstr !== '{')){
+                let evalVal = "";
+                try{
+                    evalVal = eval(text.substr(index, endInfo.index - index));
+                }catch{
+                }
+                return {key:valName, val:evalVal, index:(index + 1)};
+            }else{
                 return {key:valName, val:"", index:(index + 1)};
             }
         }

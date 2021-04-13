@@ -22,6 +22,13 @@
 			"problemMatcher": [],
 			"label": "npm: createpackage",
 			"detail": "vsce package"
+		},
+		{
+			"type": "npm",
+			"script": "publishpackage",
+			"problemMatcher": [],
+			"label": "npm: publishpackage",
+			"detail": "vsce publish"
 		}
 	]
 }

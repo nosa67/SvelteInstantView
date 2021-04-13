@@ -1,4 +1,3 @@
-import { stringify } from 'node:querystring';
 import * as sass from 'sass';
 
 // 特定のタグ名のタグの開始終了位置の配列を取得
@@ -67,47 +66,8 @@ export function getTagBlocks(text:string, tagName:string):{outerStart:number,out
     return tagBlocks;
 }
 
-// // タグ内の文字列から属性リストを取得する
-// export function getTagAttrs(text:string):{[key:string]:string}{
-
-//     let result:{[key:string]:string} = {};
-
-//     text = text.trim();
-
-//     let currentIndex = 0;
-//     while(currentIndex < text.length){
-//         let delimitInfo = multiIndexOf(text, currentIndex, ['=',' ','\t']);
-//         if(delimitInfo.index >= 0){
-//             let attrName = text.substr(currentIndex,delimitInfo.index).trim();
-//             if(delimitInfo.findstr === '='){
-//                 currentIndex = passSpaceAndTab(text, delimitInfo.index + 1);
-//                 let attrValInfo = getAttrValue(text, currentIndex);
-
-//             }else{
-//                 currentIndex = passSpaceAndTab(text, delimitInfo.index + 1);
-//                 if(text.substr(currentIndex,1) === '='){
-//                     currentIndex = passSpaceAndTab(text, currentIndex + 1);
-//                     delimitInfo = multiIndexOf(text, currentIndex, ['=',' ','\t']);
-
-//                 }else{
-//                     result[attrName] = '';
-//                     currentIndex = currentIndex + 1;
-//                 }
-//             }
-//         }else{
-//             let attrName = text.substr(currentIndex).trim();
-//             if(attrName.length > 0){
-//                 result[attrName] = '';
-//             }
-//         }
-//     }
-    
-
-
-
-//     return result;
-// }
-
+// 複数文字列の検索
+// 正規表現のほうがいい気もするが、開始位置を指定したいので作った
 export function multiIndexOf(src:string,startIndex:number, findStrs:string[]):{index:number,findstr:string}{
 
     let index = src.length;
@@ -126,170 +86,95 @@ export function multiIndexOf(src:string,startIndex:number, findStrs:string[]):{i
     }
 }
 
-export function getPlacefolderEnd(text:string, startIndex:number){
+// Svelteのプレースフォルダの終了位置を取得する
+// [引数]   text            検査する文字列
+//          startIndex      開始位置（プレースフォルダの開始位置）
+// [返値]   プレースフォルダの終了位置。見つからなければ -1
+// [備考]　文字列の開始(' または ")があればその終了まではすべて無視
+//         } より前に　{ が出てきた場合は階層が深くなったということで、} を見つける個数が増える
+export function getPlacefolderEnd(text:string, startIndex:number):number{
 
-    let counter = 1;
-    let index = startIndex;
-    while((counter > 0) && (index < text.length)){
+    let counter = 1;                                // 階層1で開始
+    let index = startIndex;                         // 文字列を検索する位置
+    while((counter > 0) && (index < text.length)){  // 階層が0になるまで処理(文字列の最終でも終了)
         index ++;
         let chr = text.substr(index,1);
-        if(chr === '{'){
+        if(chr === '{'){                            // 途中で{が見つかったので階層を深くする
             counter ++;
-        }else if(chr === '}'){
+        }else if(chr === '}'){                      // }が見つかったので階層を浅くする
             counter --;
-        }else if(chr === '"'){
+        }else if(chr === '"'){                      // " が見つかったので次の " まで移動
             index = text.indexOf('"', index + 1);
-        }else if(chr === "'"){
+        }else if(chr === "'"){                      // ' が見つかったので次の ' まで移動
             index = text.indexOf("'", index + 1);
         }
     }
+
     if(index >= text.length){
-        return -1;
+        return -1;                      // 文字列の終端なら見つからなかったので -1
     }else{
-        return index;
+        return index;                   // 最後に } が見つかった位置を返す
     }
 }
 
-export function getTagStart(text:string, startIndex:number){
-
-    let counter = 1;
-    let index = startIndex;
-    while((counter > 0) && (index < text.length)){
-        index ++;
-        let chr = text.substr(index,1);
-        if(chr === '<'){
-            counter --;
-        }else if(chr === '{'){
-            index = getPlacefolderEnd(text, index);
-        }else if(chr === '"'){
-            index = text.indexOf('"', index + 1);
-        }else if(chr === "'"){
-            index = text.indexOf("'", index + 1);
-        }
-    }
-    return index;
-}
-
-export function getTagEnd(text:string, startIndex:number){
-    let counter = 1;
-    let index = startIndex;
-    while((counter > 0) && (index < text.length)){
-        index ++;
-        let chr = text.substr(index,1);
-        if(chr === '>'){
-            counter --;
-        }else if(chr === '{'){
-            index = getPlacefolderEnd(text, index);
-        }else if(chr === '"'){
-            index = text.indexOf('"', index + 1);
-        }else if(chr === "'"){
-            index = text.indexOf("'", index + 1);
-        }
-    }
-    return index;
-}
-
-export function passSpaceAndTab(text:string,startIndex:number):number{
-    let char = text.substr(startIndex,1);
-    while((char === ' ') || (char === '\t')){
-        startIndex ++;
-        if(startIndex >= text.length){
-            return text.length;
-        }
-        char = text.substr(startIndex,1);
-    }
-    return startIndex;
-}
-
-export function getAttrValue(text:string, startIndex:number):{index:number,attrVal:string}{
-    const startChar = text.substr(startIndex,1);
-    if(startChar === '{'){
-        let endIndex = getPlacefolderEnd(text, startIndex + 1);
-        if(endIndex > startIndex){
-            return {index:(endIndex + 1), attrVal:text.substr(startIndex,endIndex - startIndex + 1)};
-        }else{
-            return {index:text.length, attrVal:text.substr(startIndex,text.length - startIndex + 1)};
-        }
+// // タグの属性の値を取得する
+// // [引数]   text        検索対象の文字列
+// //          startIndex  タグ属性の値の開始位置（空白とタブ以外の文字の開始位置）
+// // [返値]   以下の内容を返す
+// //          index       属性の値の終了位置の次      
+// //          attrVal     属性の値
+// export function getAttrValue(text:string, startIndex:number):{index:number,attrVal:string}{
+//     const startChar = text.substr(startIndex,1);
+//     if(startChar === '{'){
+//         let endIndex = getPlacefolderEnd(text, startIndex + 1);
+//         if(endIndex > startIndex){
+//             return {index:(endIndex + 1), attrVal:text.substr(startIndex,endIndex - startIndex + 1)};
+//         }else{
+//             return {index:text.length, attrVal:text.substr(startIndex,text.length - startIndex + 1)};
+//         }
         
-    }else if(startChar === '"'){
-        let endIndex = text.indexOf('"', startIndex + 1);
-        let plaseFolderStart = text.indexOf('{', startIndex + 1);
-        if((plaseFolderStart >= 0) && (plaseFolderStart < endIndex)){
-            let chackStartIndex = getPlacefolderEnd(text, plaseFolderStart + 1);
-            endIndex = text.indexOf('"', chackStartIndex + 1);
-            plaseFolderStart = text.indexOf('{', chackStartIndex + 1);
-        }
-        if(endIndex > startIndex){
-            return {index:(endIndex + 1), attrVal:text.substr(startIndex + 1,endIndex - startIndex - 1)};
-        }
-        else{
-            return {index:text.length, attrVal:text.substr(startIndex + 1,text.length - startIndex - 1)};
-        }
-    }else if(startChar === "'"){
-        let endIndex = text.indexOf("'", startIndex + 1);
-        let plaseFolderStart = text.indexOf('{', startIndex + 1);
-        if((plaseFolderStart >= 0) && (plaseFolderStart < endIndex)){
-            let chackStartIndex = getPlacefolderEnd(text, plaseFolderStart + 1);
-            endIndex = text.indexOf('"', chackStartIndex + 1);
-            plaseFolderStart = text.indexOf('{', chackStartIndex + 1);
-        }
-        if(endIndex > startIndex){
-            return {index:(endIndex + 1), attrVal:text.substr(startIndex + 1,endIndex - startIndex - 1)};
-        }else{
-            return {index:text.length, attrVal:text.substr(startIndex + 1,text.length - startIndex - 1)};
-        }
-    }else{
-        let endIndexInfo = multiIndexOf(text, startIndex + 1,[' ', '\t']);
-        if(endIndexInfo.index > startIndex){
-            return {index:(endIndexInfo.index), attrVal:text.substr(startIndex,endIndexInfo.index - startIndex)};
-        }
-        else{
-            return {index:text.length, attrVal:text.substr(startIndex,text.length - startIndex)};
-        }
-    }
-}
-
-export function getReflectVariablesText(text:string, variables:{[key:string]:string}){
-
-    let evalScriptBase ="(function(){";
-    for(let setAttr in variables){
-        evalScriptBase += "let " + setAttr + "='" + variables[setAttr] + "'\n";
-    }
-
-    let current = 0;
-    let resultText = "";
-    let startIndex = text.indexOf('{');
-    while(startIndex >= 0){
-        let endIndex = getPlacefolderEnd(text, startIndex);
-        if(endIndex >= 0){
-            let name = text.substr(startIndex + 1,endIndex - startIndex - 1);
-            const evalScript = evalScriptBase + "return " + name + "})()";
-            let evalValue = "";
-            try{
-                evalValue = eval(evalScript);
-            }catch{
-            }
-            resultText += text.substr(current, startIndex - current) + evalValue;
-            current = endIndex + 1;
-        }else{
-            break;
-        }
-        startIndex = text.indexOf('{', current);
-    }
-
-    if(current < text.length){
-        resultText += text.substr(current);
-    }
-
-    return resultText;
-}
+//     }else if(startChar === '"'){
+//         let endIndex = text.indexOf('"', startIndex + 1);
+//         let plaseFolderStart = text.indexOf('{', startIndex + 1);
+//         if((plaseFolderStart >= 0) && (plaseFolderStart < endIndex)){
+//             let chackStartIndex = getPlacefolderEnd(text, plaseFolderStart + 1);
+//             endIndex = text.indexOf('"', chackStartIndex + 1);
+//             plaseFolderStart = text.indexOf('{', chackStartIndex + 1);
+//         }
+//         if(endIndex > startIndex){
+//             return {index:(endIndex + 1), attrVal:text.substr(startIndex + 1,endIndex - startIndex - 1)};
+//         }
+//         else{
+//             return {index:text.length, attrVal:text.substr(startIndex + 1,text.length - startIndex - 1)};
+//         }
+//     }else if(startChar === "'"){
+//         let endIndex = text.indexOf("'", startIndex + 1);
+//         let plaseFolderStart = text.indexOf('{', startIndex + 1);
+//         if((plaseFolderStart >= 0) && (plaseFolderStart < endIndex)){
+//             let chackStartIndex = getPlacefolderEnd(text, plaseFolderStart + 1);
+//             endIndex = text.indexOf('"', chackStartIndex + 1);
+//             plaseFolderStart = text.indexOf('{', chackStartIndex + 1);
+//         }
+//         if(endIndex > startIndex){
+//             return {index:(endIndex + 1), attrVal:text.substr(startIndex + 1,endIndex - startIndex - 1)};
+//         }else{
+//             return {index:text.length, attrVal:text.substr(startIndex + 1,text.length - startIndex - 1)};
+//         }
+//     }else{
+//         let endIndexInfo = multiIndexOf(text, startIndex + 1,[' ', '\t']);
+//         if(endIndexInfo.index > startIndex){
+//             return {index:(endIndexInfo.index), attrVal:text.substr(startIndex,endIndexInfo.index - startIndex)};
+//         }
+//         else{
+//             return {index:text.length, attrVal:text.substr(startIndex,text.length - startIndex)};
+//         }
+//     }
+// }
 
 //--------------------------------------------------------------------------------
 // スタイルシートの変換
 //--------------------------------------------------------------------------------
 export function convertSass(text:string, style:string): string{
-
-    text = text.replace(/\r/g,'').replace(/\n/g,'').replace(/ /g,'');
 
     // styleタグの属性が「sass」や「scss」ならcssに変換して保存。それ以外ならそのまま保存
     if(style === "sass") {
