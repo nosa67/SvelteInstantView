@@ -9,9 +9,9 @@ const singleTags = [
 const novalueAttrs = ['disabled','readonly'];
 
 // Svelteの制御処理判定文字列
-const svelteControlMarks = ['#',':','/'];
+// const svelteControlMarks = ['#',':','/'];
 
-import {multiIndexOf, getPlacefolderEnd, getTagEnd, passSpaceAndTab, getAttrValue, getCommentEnd, getReflectVariablesText} from './utility';
+import {multiIndexOf, getPlacefolderEnd, getTagEnd, passSpaceAndTab, getAttrValue, getReflectVariablesText, convertSass} from './utility';
 
 //================================================================================
 //  基本インタフェース
@@ -428,6 +428,12 @@ export class SvelteDoc{
         const fs = require('fs');
         var fileText = fs.readFileSync(filepath, 'utf8');
         
+        // htmlのコメントを削除する
+        fileText = this.dropComment(fileText);
+
+        // svelteの{#if}でelse以下を削除する
+        fileText = this.dropSvelteIfElse(fileText);
+
         // ファイル内容をコンテンツリストにする
         var res = this.getPartsList(fileText, 0, "");
         this.tags = res.contents;
@@ -462,6 +468,8 @@ export class SvelteDoc{
         }
         return result;
     }
+
+    
 
     // 配下のコンポーネントを読み込む
     // 自身のコンポーネントのフォルダパス
@@ -511,6 +519,105 @@ export class SvelteDoc{
         return result;
     }
 
+    private dropComment(text:string):string{
+        let startIndex = text.lastIndexOf('<!--');
+        while(startIndex >= 0){
+            let endIndex = text.indexOf('-->', startIndex + 3);
+            if(endIndex < 0){
+                text = text.substr(0,startIndex);
+            }
+            else{
+                text = text.substr(0,startIndex) + text.substr(endIndex + 3);
+            }
+            startIndex = text.lastIndexOf('<!--');
+        }
+
+        return text;
+    }
+
+    private dropSvelteIfElse(text:string):string{
+    
+        let isStartIndex = text.indexOf('{#if');
+        
+        while(isStartIndex >= 0){
+
+            // {#if}の終了位置を取得を取得し、存在するならそのブロックを削除(終了位置を)開始位置まで戻す
+            let ifEndIndex = text.indexOf('}', isStartIndex + 4);
+            if(ifEndIndex >= 0){
+                text = text.substr(0,isStartIndex) + text.substr(ifEndIndex + 1);
+                ifEndIndex = isStartIndex;
+            }
+
+            let counter = 1;
+            let findStart = ifEndIndex + 1;
+            let deleteStart = -1;
+
+            // {/if}まで処理する。途中{#if}がある場合ネストとみなしてネストがなくなるまで処理する
+            while(true){
+                let nextInfo = multiIndexOf(text,findStart , ['{#if','{/if', '{:else']);
+                if(nextInfo.index < 0){
+                    // {#if}の対となるものがなければ終了
+                    break;
+                }else{
+                    if(nextInfo.findstr === '{#if'){
+                        // {#if}が見つかったので階層を１加算しブロックの終了位置を次の検索開始位置にする
+                        counter ++;
+                        findStart = text.indexOf('}', nextInfo.index + 4) + 1;
+                    }else if(nextInfo.findstr === '{/if'){
+                        // {/if}が見つかったので階層を１減産
+                        counter --;
+                        if(counter <= 0){
+                            
+                            let deleteEnd = text.indexOf('}', nextInfo.index + 4);
+                            if(deleteEnd >= 0){
+                                // {/if の後ろの} が見つかった場合
+                                if(deleteStart > 0){
+                                    // ブロック内で{:elseが有った場合その開始位置から{/if}の最後までを削除
+                                    text = text.substr(0,deleteStart) + text.substr(deleteEnd + 1);
+                                }else{
+                                    // ブロック内に{:elseがなかった場合、{/if}を削除
+                                    text = text.substr(0,nextInfo.index) + text.substr(deleteEnd + 1);
+                                }
+                            }else{
+                                // {/if の後ろの} が見つからなかった場合
+                                if(deleteStart > 0){
+                                    // ブロック内で{:elseが有った場合その開始位置から以降すべて削除
+                                    text = text.substr(0,deleteStart);
+                                }else{
+                                    // ブロック内に{:elseがなかった場合、{/if}から以降すべて削除
+                                    text = text.substr(0,nextInfo.index);
+                                }
+                            }
+
+                            // {/if}が見つかったのでブロック内処理のループを終了して次の{ifを探させる}
+                            break;
+                        }else{
+                            // ブロックの終了まで来ていないので{/if}の後ろまでインデックスを移動
+                            findStart = text.indexOf('}', nextInfo.index + 4) + 1;
+                            if(findStart < 0){
+                                findStart = nextInfo.index + 4;
+                            }
+                        }
+                    }else{
+                        // {:elseが見つかった場合、第１階層で最初の時だけ削除開始位置に設定
+                        if((counter === 1) && (deleteStart < 0)){
+                            deleteStart = nextInfo.index;
+                        }
+                        findStart = text.indexOf('}', nextInfo.index + 4) + 1;
+                        if(findStart < 0){
+                            findStart = nextInfo.index + 6;
+                        }
+                    }
+                }   
+            }
+
+            // 再度{if}ブロックの開始を探す
+            isStartIndex = text.indexOf('{#if');
+        }
+
+        return text;
+    }
+
     // ファイル内で定義されているスコープCSSをファイル名付きのCSSに変更する
     private convertCss(){
         
@@ -526,10 +633,10 @@ export class SvelteDoc{
             var classValue = "";
             if(endIndex < 0){
                 classValue = this.stylesText.substr(startIndex);
-                startIndex = this.stylesText.length;
+                current = this.stylesText.length;
             }else{
                 classValue = this.stylesText.substr(startIndex, endIndex - startIndex + 1 );
-                startIndex = endIndex + 1;
+                current = endIndex + 1;
             }
             
             //「.」の存在を確認して、存在する場合はクラス名の前にファイル名_を追加してファイル内のタグのclass名を変更。
@@ -545,7 +652,7 @@ export class SvelteDoc{
                     tagName = "";
                 }
             }
-            this.classes[replaceClassName] = classValue;
+            this.classes[tagName + replaceClassName] = classValue;
             let changeClassName = "";
             if(className.indexOf('.') >= 0){
                 changeClassName = className.substr(className.indexOf('.') + 1);
@@ -557,7 +664,7 @@ export class SvelteDoc{
                 }
             }
 
-            startIndex = this.stylesText.indexOf('{', startIndex);
+            startIndex = this.stylesText.indexOf('{', current);
         }
     }
 
@@ -701,11 +808,11 @@ export class SvelteDoc{
             }
 
             // タグの終了位置を取得
-            if(fileText.substr(tagStart,4) === '<!--'){
-                var tagEnd = getCommentEnd(fileText, tagStart);
-            }else{
+            // if(fileText.substr(tagStart,4) === '<!--'){
+            //     var tagEnd = getCommentEnd(fileText, tagStart);
+            // }else{
                 var tagEnd = getTagEnd(fileText, tagStart);
-            }
+            // }
            
             
             // タグ内の文字列からタグを作成する
@@ -759,14 +866,22 @@ export class SvelteDoc{
                             startIndex = fileText.indexOf('>', scriptEnd + 1) + 1;
                         }
                     }else if(tagName.toLowerCase() === 'style'){
+                        let style = "css";
+                        if(tagText.includes('lang')){
+                            if(tagText.includes('sass')){
+                                style = "sass";
+                            }else if (tagText.includes('scss')){
+                                style = "scss";
+                            }
+                        }
                         const styleEnd = fileText.indexOf('/style', tagEnd + 1);
                         if(styleEnd < 0){
                             if(tagEnd + 1 < fileText.length - 1){
-                                this.stylesText += fileText.substr(tagEnd + 1) + '\n';
+                                this.stylesText += convertSass(fileText.substr(tagEnd + 1),style) + '\n';
                             }
                             startIndex = fileText.length;
                         }else{
-                            this.stylesText += fileText.substr(tagEnd + 1, styleEnd - (tagEnd + 1))+ '\n';
+                            this.stylesText += convertSass(fileText.substr(tagEnd + 1, styleEnd - (tagEnd + 1) -1 ),style) + '\n';
                             startIndex = fileText.indexOf('>', styleEnd + 1) + 1;
                         }
                     }else{
@@ -818,7 +933,7 @@ export class SvelteDoc{
             const items = inText.split(/\s+/);
 
             // 最初の文字がsvelteの制御なら除外
-            if(svelteControlMarks.indexOf(items[0].substr(0,1)) < 0){
+            // if(svelteControlMarks.indexOf(items[0].substr(0,1)) < 0){
 
                 // 最初の文字列が「@debug」なら除外 
                 if(items[0].toLowerCase() !== '@debug'){
@@ -828,7 +943,7 @@ export class SvelteDoc{
                         result += text.substr(startIndex, endIndex - startIndex +1);
                     }
                 }
-            }
+            // }
             current = endIndex + 1;
             startIndex = text.indexOf('{',current);
         }
