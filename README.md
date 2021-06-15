@@ -56,3 +56,9 @@ Could not publish correctly　Ver. 0.2.0
 
 # 0.2.3
 fixed sum bugs
+
+# 0.2.4
+Sorry!. don't work. becose VSCE command has created an abnormal package.
+
+# 0.2.5
+fixed 3 bugs.

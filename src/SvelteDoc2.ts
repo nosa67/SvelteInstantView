@@ -255,6 +255,26 @@ export class SvelteDoc2{
         this.convertCss(styleText);
     }
 
+    private getIfEnd(text:string, startIndex:number):number{
+        let lastIndex = startIndex - 1;
+        
+        let counter = 1;
+        while(counter > 0){
+            let findInfo = UTILITY.multiIndexOf(text, lastIndex + 1, ['{','}']);
+            if(findInfo.index < 0){
+                return text.length - 1;
+            }
+            lastIndex = findInfo.index;
+            if(findInfo.findstr === '{'){
+                counter ++;
+            }else{
+                counter --;
+            }
+        }
+        return lastIndex;
+    }
+
+
     // svelteの{#if}でelse以下を削除する
     // [引数]   text    svelteのhtmlテキスト
     // [返値]   svelteの{#if}で{:else以下を削除したテキスト
@@ -265,7 +285,8 @@ export class SvelteDoc2{
         while(isStartIndex >= 0){
 
             // {#if}の終了位置を取得を取得し、存在するならそのブロックを削除(終了位置を)開始位置まで戻す
-            let ifEndIndex = text.indexOf('}', isStartIndex + 4);
+            let ifEndIndex = this.getIfEnd(text, isStartIndex + 4);
+            // let ifEndIndex = text.indexOf('}', isStartIndex + 4);
             if(ifEndIndex >= 0){
                 text = text.substr(0,isStartIndex) + text.substr(ifEndIndex + 1);
                 ifEndIndex = isStartIndex;
@@ -285,13 +306,15 @@ export class SvelteDoc2{
                     if(nextInfo.findstr === '{#if'){
                         // {#if}が見つかったので階層を１加算しブロックの終了位置を次の検索開始位置にする
                         counter ++;
-                        findStart = text.indexOf('}', nextInfo.index + 4) + 1;
+                        findStart = this.getIfEnd(text, nextInfo.index + 4) + 1;
+                        // findStart = text.indexOf('}', nextInfo.index + 4) + 1;
                     }else if(nextInfo.findstr === '{/if'){
                         // {/if}が見つかったので階層を１減産
                         counter --;
                         if(counter <= 0){
                             
-                            let deleteEnd = text.indexOf('}', nextInfo.index + 4);
+                            let deleteEnd = this.getIfEnd(text, nextInfo.index + 4);
+                            // let deleteEnd = text.indexOf('}', nextInfo.index + 4);
                             if(deleteEnd >= 0){
                                 // {/if の後ろの} が見つかった場合
                                 if(deleteStart > 0){
@@ -316,7 +339,8 @@ export class SvelteDoc2{
                             break;
                         }else{
                             // ブロックの終了まで来ていないので{/if}の後ろまでインデックスを移動
-                            findStart = text.indexOf('}', nextInfo.index + 4) + 1;
+                            findStart = this.getIfEnd(text, nextInfo.index + 4) + 1;
+                            // findStart = text.indexOf('}', nextInfo.index + 4) + 1;
                             if(findStart < 0){
                                 findStart = nextInfo.index + 4;
                             }
@@ -326,7 +350,8 @@ export class SvelteDoc2{
                         if((counter === 1) && (deleteStart < 0)){
                             deleteStart = nextInfo.index;
                         }
-                        findStart = text.indexOf('}', nextInfo.index + 4) + 1;
+                        findStart = this.getIfEnd(text, nextInfo.index + 4) + 1;
+                        // findStart = text.indexOf('}', nextInfo.index + 4) + 1;
                         if(findStart < 0){
                             findStart = nextInfo.index + 6;
                         }
@@ -343,6 +368,8 @@ export class SvelteDoc2{
     // svelteのファイル内のstyleをユニーク名に変える
     private convertCss(styleText:string){
         
+        styleText = styleText.replace('@charset "UTF-8";','');
+
         let addClassName = this.filename.replace('.svelte','');
 
         // styleタグ内のテキストから「{」を取得
@@ -429,8 +456,11 @@ export class SvelteDoc2{
                     if(importFile.substr(importFile.lastIndexOf('.') + 1).toLowerCase() === 'svelte')
                     {
                         let doc = new SvelteDoc2();
-                        doc.readFile(path.join(currentPath, importFile));
-                        this.children[key] = doc;
+                        try{
+                            // 読み込めないパッケージは無視する
+                            doc.readFile(path.join(currentPath, importFile));
+                            this.children[key] = doc;
+                        }catch{}
                     }
                     startIndex = lineEndInfo.index;
                 }
